@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#263238">
+<meta name="description" content="Offline university student timetable, reminders and assignment manager">
+<link rel="manifest" href="manifest.json">
+<title>UniPlanner Offline</title>
+<style>
+:root {
+  --bg:#f4f6f8; --card:#fff; --text:#1f2933; --muted:#607d8b;
+  --primary:#37474f; --primary2:#263238; --border:#d6dde1;
+  --danger:#c62828; --success:#2e7d32; --warning:#ef9b0f;
+}
+[data-theme="dark"] {
+  --bg:#12181c; --card:#1c252b; --text:#eef2f4; --muted:#a9b7bf;
+  --primary:#90a4ae; --primary2:#0e1418; --border:#3a474e;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+header{background:var(--primary2);color:#fff;padding:18px 24px;display:flex;justify-content:space-between;gap:16px;align-items:center;position:sticky;top:0;z-index:20}
+.header-actions{display:flex;gap:8px;flex-wrap:wrap}
+button,.btn{border:0;border-radius:9px;padding:10px 14px;cursor:pointer}
+button{background:#eceff1;color:#263238}
+button.primary{background:#455a64;color:#fff}
+button.success{background:var(--success);color:#fff}
+button.danger{background:var(--danger);color:#fff}
+button:disabled{opacity:.5;cursor:not-allowed}
+nav{background:var(--card);padding:10px;display:flex;gap:8px;overflow:auto;box-shadow:0 2px 8px rgba(0,0,0,.08);position:sticky;top:76px;z-index:15}
+nav button.active,nav button:hover{background:var(--primary);color:#fff}
+.container{max-width:1250px;margin:22px auto;padding:0 16px}
+.section{display:none}.section.active{display:block}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
+.card,.panel{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:18px;box-shadow:0 4px 14px rgba(0,0,0,.06)}
+.stat h3{font-size:14px;color:var(--muted);margin-bottom:8px}.number{font-size:30px;font-weight:700}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+label{display:block;font-size:13px;font-weight:700;margin-bottom:6px}
+input,select,textarea{width:100%;padding:11px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text)}
+textarea{min-height:90px;resize:vertical}
+h2{margin-bottom:14px} h3{margin-bottom:8px}
+.day-grid{display:grid;grid-template-columns:repeat(7,minmax(150px,1fr));gap:8px;overflow:auto}
+.day{background:rgba(127,127,127,.08);border-radius:10px;padding:8px;min-height:180px}
+.day>h3{text-align:center;font-size:14px}
+.class-item{background:var(--card);border-left:5px solid #607d8b;padding:10px;border-radius:8px;margin:8px 0;box-shadow:0 2px 7px rgba(0,0,0,.08)}
+.icon{font-size:26px}.small{font-size:12px;color:var(--muted);margin-top:3px}
+.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.assignment{display:flex;justify-content:space-between;gap:15px;align-items:flex-start;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;margin:10px 0}
+.assignment.completed{opacity:.6}.assignment.completed h3{text-decoration:line-through}
+.badge{display:inline-block;padding:4px 8px;border-radius:12px;background:rgba(127,127,127,.15);font-size:11px;margin:3px 4px 0 0}
+.reminder{background:rgba(255,193,7,.12);border-left:5px solid #ffb300;padding:12px;border-radius:9px;margin:8px 0}
+.notice{padding:10px;border-radius:8px;background:rgba(76,175,80,.12);margin-top:10px}
+.empty{text-align:center;color:var(--muted);padding:25px}
+.flex{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.hidden{display:none!important}
+footer{text-align:center;color:var(--muted);padding:25px}
+@media(max-width:700px){header{position:static;flex-direction:column;align-items:flex-start}nav{position:sticky;top:0}.assignment{flex-direction:column}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🎓 UniPlanner</h1>
+    <div style="opacity:.82;font-size:13px">Offline timetable • reminders • assignments</div>
+  </div>
+  <div class="header-actions">
+    <button id="installBtn" class="hidden">📲 Install</button>
+    <button id="soundBtn">🔊 Sound: ON</button>
+    <button id="notifyBtn">🔔 Notifications</button>
+    <button id="themeBtn">🌙 Dark mode</button>
+  </div>
+</header>
+
+<nav>
+  <button class="active" data-section="dashboard">🏠 Dashboard</button>
+  <button data-section="timetable">📅 Timetable</button>
+  <button data-section="assignments">📝 Assignments</button>
+  <button data-section="classesForm">➕ Add Class</button>
+  <button data-section="workForm">📚 Add Work</button>
+  <button data-section="settings">⚙️ Settings</button>
+</nav>
+
+<div class="container">
+
+<section id="dashboard" class="section active">
+  <div class="grid" style="margin-bottom:16px">
+    <div class="card stat"><h3>📅 Classes</h3><div class="number" id="classCount">0</div></div>
+    <div class="card stat"><h3>📝 Assignments</h3><div class="number" id="workCount">0</div></div>
+    <div class="card stat"><h3>⏳ Pending</h3><div class="number" id="pendingCount">0</div></div>
+    <div class="card stat"><h3>✅ Completed</h3><div class="number" id="doneCount">0</div></div>
+  </div>
+  <div class="panel">
+    <div class="flex"><h2>🔔 Today's reminders</h2><span id="clock"></span></div>
+    <div id="todayReminders"></div>
+  </div>
+</section>
+
+<section id="timetable" class="section">
+  <div class="panel">
+    <div class="flex"><h2>📅 Weekly timetable</h2><button class="primary" onclick="showSection('classesForm')">➕ Add class</button></div>
+    <div class="day-grid" id="weekGrid"></div>
+  </div>
+</section>
+
+<section id="assignments" class="section">
+  <div class="panel">
+    <div class="flex"><h2>📝 Assignments & projects</h2><button class="primary" onclick="showSection('workForm')">➕ Add work</button></div>
+    <div id="workList"></div>
+  </div>
+</section>
+
+<section id="classesForm" class="section">
+  <div class="panel">
+    <h2 id="classFormTitle">➕ Add lecture</h2>
+    <input type="hidden" id="editClassId">
+    <div class="form-grid">
+      <div><label>Subject</label><input id="subject" placeholder="e.g. Mathematics"></div>
+      <div><label>Subject icon</label>
+        <select id="icon">
+          <option>📐</option><option>💻</option><option>🧪</option><option>🧬</option>
+          <option>🔬</option><option>📖</option><option>🌍</option><option>🏛️</option>
+          <option>💼</option><option>⚖️</option><option>📊</option><option>🎨</option>
+          <option>🏃</option><option>🌐</option><option>🎓</option>
+        </select>
+      </div>
+      <div><label>Day</label><select id="day">
+        <option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option>
+        <option>Friday</option><option>Saturday</option><option>Sunday</option>
+      </select></div>
+      <div><label>Start time</label><input type="time" id="startTime"></div>
+      <div><label>End time</label><input type="time" id="endTime"></div>
+      <div><label>Lecturer</label><input id="lecturer" placeholder="e.g. Dr. John"></div>
+      <div><label>Location</label><input id="location" placeholder="e.g. Lecture Hall B"></div>
+      <div><label>Reminder before class</label><select id="classReminder">
+        <option value="0">At class time</option><option value="5">5 minutes before</option>
+        <option value="10" selected>10 minutes before</option><option value="15">15 minutes before</option>
+        <option value="30">30 minutes before</option>
+      </select></div>
+      <div><label>Reminder sound</label><select id="classSound">
+        <option value="beep">🔔 Beep</option><option value="bell">🔔 Bell</option><option value="chime">✨ Chime</option>
+      </select></div>
+    </div>
+    <div class="actions">
+      <button class="primary" id="saveClassBtn" onclick="saveClass()">💾 Save class</button>
+      <button onclick="resetClassForm()">↩️ Clear</button>
+    </div>
+  </div>
+</section>
+
+<section id="workForm" class="section">
+  <div class="panel">
+    <h2 id="workFormTitle">📚 Add assignment / project</h2>
+    <input type="hidden" id="editWorkId">
+    <div class="form-grid">
+      <div><label>Title</label><input id="workTitle" placeholder="e.g. Database Project"></div>
+      <div><label>Subject</label><input id="workSubject" placeholder="e.g. Computer Science"></div>
+      <div><label>Type</label><select id="workType"><option>Assignment</option><option>Project</option><option>CAT</option><option>Exam</option><option>Presentation</option></select></div>
+      <div><label>Due date</label><input type="date" id="dueDate"></div>
+      <div><label>Due time</label><input type="time" id="dueTime" value="23:59"></div>
+      <div><label>Reminder</label><select id="workReminder"><option value="0">At deadline</option><option value="60">1 hour before</option><option value="1440" selected>1 day before</option><option value="2880">2 days before</option></select></div>
+      <div><label>Priority</label><select id="priority"><option>High</option><option>Medium</option><option>Low</option></select></div>
+      <div><label>Reminder sound</label><select id="workSound"><option value="beep">🔔 Beep</option><option value="bell">🔔 Bell</option><option value="chime">✨ Chime</option></select></div>
+    </div>
+    <br>
+    <label>Description / notes</label><textarea id="workDescription" placeholder="Instructions, project details or notes..."></textarea>
+    <div class="actions"><button class="primary" onclick="saveWork()">💾 Save work</button><button onclick="resetWorkForm()">↩️ Clear</button></div>
+  </div>
+</section>
+
+<section id="settings" class="section">
+  <div class="panel">
+    <h2>⚙️ Offline app settings</h2>
+    <p class="small">Everything is stored on this device in your browser. No server or internet connection is required.</p>
+    <div class="actions">
+      <button class="primary" onclick="exportData()">⬇️ Backup data</button>
+      <button onclick="document.getElementById('importFile').click()">⬆️ Restore data</button>
+      <button class="danger" onclick="clearAllData()">🗑️ Delete all data</button>
+    </div>
+    <input class="hidden" id="importFile" type="file" accept=".json,application/json" onchange="importData(event)">
+    <div class="notice" id="notifyStatus">Notification status: checking…</div>
+    <div class="notice">💡 For reliable background alarms while the app is open/installed, keep notifications enabled. Browser policies can prevent sounds/notifications when the page is fully closed.</div>
+  </div>
+</section>
+
+</div>
+<footer>UniPlanner Offline • Data stays on this device 💾</footer>
+
+<script>
+const KEY = "uniplanner_v3";
+const state = JSON.parse(localStorage.getItem(KEY) || '{"classes":[],"work":[],"sound":true,"theme":"light","fired":[]}');
+state.classes ||= []; state.work ||= []; state.fired ||= [];
+let deferredPrompt = null;
+let audioCtx = null;
+
+const days = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+const dayIndex = Object.fromEntries(days.map((d,i)=>[d,i]));
+
+function saveState(){ localStorage.setItem(KEY, JSON.stringify(state)); }
+
+function showSection(id){
+  document.querySelectorAll(".section").forEach(x=>x.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("active", x.dataset.section===id));
+  renderAll();
+}
+document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>showSection(b.dataset.section)));
+
+function esc(s){ return String(s ?? "").replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m])); }
+
+function playSound(type="beep"){
+  if(!state.sound) return;
+  try{
+    audioCtx ||= new (window.AudioContext||window.webkitAudioContext)();
+    const osc=audioCtx.createOscillator(), gain=audioCtx.createGain();
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    const freq = type==="bell" ? 880 : type==="chime" ? 660 : 520;
+    osc.frequency.value=freq; osc.type=type==="bell" ? "sine" : "triangle";
+    gain.gain.value=.0001; const now=audioCtx.currentTime;
+    gain.gain.exponentialRampToValueAtTime(.18, now+.02);
+    gain.gain.exponentialRampToValueAtTime(.0001, now+.55);
+    osc.start(now); osc.stop(now+.6);
+  }catch(e){}
+}
+
+async function requestNotifications(){
+  if(!("Notification" in window)){ alert("This browser does not support notifications."); return; }
+  const p=await Notification.requestPermission();
+  updateNotifyStatus(p);
+  if(p==="granted") new Notification("🎓 UniPlanner", {body:"Notifications are enabled."});
+}
+function updateNotifyStatus(p=Notification.permission){
+  document.getElementById("notifyStatus").textContent = "Notification status: " + p;
+}
+document.getElementById("notifyBtn").onclick=requestNotifications;
+document.getElementById("soundBtn").onclick=()=>{
+  state.sound=!state.sound; saveState();
+  document.getElementById("soundBtn").textContent=state.sound?"🔊 Sound: ON":"🔇 Sound: OFF";
+  if(state.sound) playSound("chime");
+};
+document.getElementById("themeBtn").onclick=()=>{
+  state.theme=state.theme==="dark"?"light":"dark"; saveState(); applyTheme();
+};
+function applyTheme(){
+  document.documentElement.dataset.theme=state.theme==="dark"?"dark":"light";
+  document.getElementById("themeBtn").textContent=state.theme==="dark"?"☀️ Light mode":"🌙 Dark mode";
+  document.getElementById("soundBtn").textContent=state.sound?"🔊 Sound: ON":"🔇 Sound: OFF";
+}
+function notify(title,body,sound="beep"){
+  playSound(sound);
+  if("Notification" in window && Notification.permission==="granted"){
+    try{ new Notification(title,{body,icon:"icon.svg"}); }catch(e){}
+  }
+}
+function eventKey(prefix,id,when){ return `${prefix}-${id}-${when}`; }
+function markFired(key){ if(!state.fired.includes(key)){ state.fired.push(key); if(state.fired.length>500) state.fired=state.fired.slice(-400); saveState(); } }
+
+function classDateTime(c, baseDate=new Date()){
+  const d=new Date(baseDate);
+  const target=dayIndex[c.day], today=(d.getDay()+6)%7, delta=target-today;
+  d.setDate(d.getDate()+delta);
+  const [h,m]=c.startTime.split(":").map(Number); d.setHours(h,m,0,0); return d;
+}
+
+function checkReminders(){
+  const now=new Date();
+  state.classes.forEach(c=>{
+    let event=classDateTime(c,now);
+    if(event < now-24*3600*1000) event=classDateTime(c,new Date(now.getTime()+7*86400000));
+    const minutes=Number(c.reminder||0);
+    const target=new Date(event.getTime()-minutes*60000);
+    const diff=now-target;
+    if(diff>=0 && diff<90000){
+      const key=eventKey("class",c.id,event.getTime());
+      if(!state.fired.includes(key)){
+        const when=minutes?`${minutes} minutes before`:"now";
+        notify(`📅 ${c.subject}`,`${when} • ${c.startTime}-${c.endTime}${c.location?" • "+c.location:""}`,c.sound);
+        markFired(key);
+        renderAll();
+      }
+    }
+  });
+  state.work.forEach(w=>{
+    if(w.completed || !w.dueDate) return;
+    const due=new Date(`${w.dueDate}T${w.dueTime||"23:59"}`);
+    const target=new Date(due.getTime()-Number(w.reminder||0)*60000);
+    if(now>=target && now-target<90000){
+      const key=eventKey("work",w.id,due.getTime());
+      if(!state.fired.includes(key)){
+        notify(`📝 ${w.type}: ${w.title}`,`Due ${w.dueDate} ${w.dueTime||""}`,w.sound);
+        markFired(key);
+      }
+    }
+  });
+}
+setInterval(checkReminders,15000);
+
+function saveClass(){
+  const data={
+    id:document.getElementById("editClassId").value || Date.now(),
+    subject:document.getElementById("subject").value.trim(),
+    icon:document.getElementById("icon").value,
+    day:document.getElementById("day").value,
+    startTime:document.getElementById("startTime").value,
+    endTime:document.getElementById("endTime").value,
+    lecturer:document.getElementById("lecturer").value.trim(),
+    location:document.getElementById("location").value.trim(),
+    reminder:Number(document.getElementById("classReminder").value),
+    sound:document.getElementById("classSound").value
+  };
+  if(!data.subject||!data.startTime||!data.endTime){alert("Enter subject, start time and end time.");return}
+  const i=state.classes.findIndex(x=>String(x.id)===String(data.id));
+  if(i>=0) state.classes[i]=data; else state.classes.push(data);
+  saveState(); resetClassForm(); alert("Class saved."); showSection("timetable");
+}
+function editClass(id){
+  const c=state.classes.find(x=>String(x.id)===String(id)); if(!c)return;
+  document.getElementById("editClassId").value=c.id;
+  for(const [id,val] of Object.entries({subject:c.subject,icon:c.icon,day:c.day,startTime:c.startTime,endTime:c.endTime,lecturer:c.lecturer,location:c.location,classReminder:c.reminder,classSound:c.sound}))
+    document.getElementById(id).value=val;
+  document.getElementById("classFormTitle").textContent="✏️ Edit lecture";
+  showSection("classesForm");
+}
+function resetClassForm(){
+  ["editClassId","subject","startTime","endTime","lecturer","location"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("icon").value="📐"; document.getElementById("day").value="Monday";
+  document.getElementById("classReminder").value="10"; document.getElementById("classSound").value="beep";
+  document.getElementById("classFormTitle").textContent="➕ Add lecture";
+}
+function deleteClass(id){
+  if(confirm("Delete this lecture?")){state.classes=state.classes.filter(x=>String(x.id)!==String(id));saveState();renderAll();}
+}
+
+function saveWork(){
+  const data={
+    id:document.getElementById("editWorkId").value || Date.now(),
+    title:document.getElementById("workTitle").value.trim(),
+    subject:document.getElementById("workSubject").value.trim(),
+    type:document.getElementById("workType").value,
+    dueDate:document.getElementById("dueDate").value,
+    dueTime:document.getElementById("dueTime").value,
+    reminder:Number(document.getElementById("workReminder").value),
+    priority:document.getElementById("priority").value,
+    sound:document.getElementById("workSound").value,
+    description:document.getElementById("workDescription").value.trim(),
+    completed:false
+  };
+  if(!data.title||!data.dueDate){alert("Enter a title and due date.");return}
+  const old=state.work.find(x=>String(x.id)===String(data.id));
+  if(old) data.completed=old.completed;
+  const i=state.work.findIndex(x=>String(x.id)===String(data.id));
+  if(i>=0) state.work[i]=data; else state.work.push(data);
+  saveState(); resetWorkForm(); alert("Work saved."); showSection("assignments");
+}
+function editWork(id){
+  const w=state.work.find(x=>String(x.id)===String(id)); if(!w)return;
+  document.getElementById("editWorkId").value=w.id;
+  for(const [id,val] of Object.entries({workTitle:w.title,workSubject:w.subject,workType:w.type,dueDate:w.dueDate,dueTime:w.dueTime||"23:59",workReminder:w.reminder,priority:w.priority,workSound:w.sound,workDescription:w.description}))
+    document.getElementById(id).value=val;
+  document.getElementById("workFormTitle").textContent="✏️ Edit assignment / project";
+  showSection("workForm");
+}
+function resetWorkForm(){
+  ["editWorkId","workTitle","workSubject","dueDate","workDescription"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("dueTime").value="23:59"; document.getElementById("workType").value="Assignment";
+  document.getElementById("workReminder").value="1440"; document.getElementById("priority").value="High"; document.getElementById("workSound").value="beep";
+  document.getElementById("workFormTitle").textContent="📚 Add assignment / project";
+}
+function toggleWork(id){const w=state.work.find(x=>String(x.id)===String(id));if(w){w.completed=!w.completed;saveState();renderAll();}}
+function deleteWork(id){if(confirm("Delete this work?")){state.work=state.work.filter(x=>String(x.id)!==String(id));saveState();renderAll();}}
+
+function workIcon(t){return {Assignment:"📝",Project:"💻",CAT:"📋",Exam:"🎓",Presentation:"🎤"}[t]||"📚";}
+function renderTimetable(){
+  const g=document.getElementById("weekGrid"); g.innerHTML="";
+  days.forEach(d=>{
+    const day=document.createElement("div"); day.className="day";
+    day.innerHTML=`<h3>${d}</h3>`;
+    const items=state.classes.filter(c=>c.day===d).sort((a,b)=>a.startTime.localeCompare(b.startTime));
+    if(!items.length) day.innerHTML+="<div class='empty'>No classes</div>";
+    items.forEach(c=>{
+      day.innerHTML+=`<div class="class-item">
+        <div class="icon">${c.icon}</div><strong>${esc(c.subject)}</strong>
+        <div class="small">⏰ ${esc(c.startTime)}–${esc(c.endTime)}</div>
+        <div class="small">👨‍🏫 ${esc(c.lecturer||"Lecturer not set")}</div>
+        <div class="small">📍 ${esc(c.location||"Location not set")}</div>
+        <div class="small">🔔 ${c.reminder?c.reminder+" min before":"At class time"}</div>
+        <div class="actions"><button onclick="editClass(${JSON.stringify(c.id)})">✏️</button><button class="danger" onclick="deleteClass(${JSON.stringify(c.id)})">🗑️</button></div>
+      </div>`;
+    });
+    g.appendChild(day);
+  });
+}
+function renderWork(){
+  const box=document.getElementById("workList");box.innerHTML="";
+  if(!state.work.length){box.innerHTML="<div class='empty'>📚 No assignments or projects yet.</div>";return}
+  [...state.work].sort((a,b)=>new Date(a.dueDate+"T"+(a.dueTime||"23:59"))-new Date(b.dueDate+"T"+(b.dueTime||"23:59"))).forEach(w=>{
+    const d=document.createElement("div");d.className="assignment"+(w.completed?" completed":"");
+    d.innerHTML=`<div style="flex:1"><h3>${workIcon(w.type)} ${esc(w.title)}</h3>
+      <div class="small">📚 ${esc(w.subject||"No subject")}</div>
+      <div class="small">📅 Due: ${esc(w.dueDate)} ${esc(w.dueTime||"")}</div>
+      <span class="badge">${esc(w.priority)} priority</span><span class="badge">${esc(w.type)}</span>
+      <div class="small">🔔 ${w.reminder? (w.reminder>=1440?(w.reminder/1440)+" day(s) before":(w.reminder/60)+" hour(s) before"):"At deadline"}</div>
+      ${w.description?`<div class="small" style="margin-top:7px">${esc(w.description)}</div>`:""}</div>
+      <div class="actions"><button class="success" onclick="toggleWork(${JSON.stringify(w.id)})">${w.completed?"↩️ Undo":"✅ Complete"}</button><button onclick="editWork(${JSON.stringify(w.id)})">✏️ Edit</button><button class="danger" onclick="deleteWork(${JSON.stringify(w.id)})">🗑️ Delete</button></div>`;
+    box.appendChild(d);
+  });
+}
+function renderDashboard(){
+  document.getElementById("classCount").textContent=state.classes.length;
+  document.getElementById("workCount").textContent=state.work.length;
+  document.getElementById("pendingCount").textContent=state.work.filter(x=>!x.completed).length;
+  document.getElementById("doneCount").textContent=state.work.filter(x=>x.completed).length;
+  const now=new Date(), day=days[(now.getDay()+6)%7], date=now.toISOString().slice(0,10);
+  const box=document.getElementById("todayReminders"); box.innerHTML="";
+  const todayClasses=state.classes.filter(c=>c.day===day).sort((a,b)=>a.startTime.localeCompare(b.startTime));
+  const due=state.work.filter(w=>w.dueDate===date&&!w.completed);
+  if(!todayClasses.length&&!due.length){box.innerHTML="<div class='empty'>🎉 Nothing due today.</div>";return}
+  todayClasses.forEach(c=>box.innerHTML+=`<div class="reminder"><strong>${c.icon} ${esc(c.subject)}</strong><div>⏰ ${esc(c.startTime)}–${esc(c.endTime)}</div><div>👨‍🏫 ${esc(c.lecturer||"Lecturer not set")}</div><div>📍 ${esc(c.location||"Location not set")}</div></div>`);
+  due.forEach(w=>box.innerHTML+=`<div class="reminder"><strong>📝 ${esc(w.type)} due today</strong><div>${esc(w.title)}</div><div>📚 ${esc(w.subject||"No subject")}</div></div>`);
+}
+function updateClock(){document.getElementById("clock").textContent=new Date().toLocaleString(undefined,{weekday:"short",hour:"2-digit",minute:"2-digit",second:"2-digit"});}
+function renderAll(){renderTimetable();renderWork();renderDashboard();updateClock();updateNotifyStatus();applyTheme();}
+
+function exportData(){
+  const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="uniplanner-backup.json";a.click();URL.revokeObjectURL(a.href);
+}
+function importData(e){
+  const file=e.target.files[0]; if(!file)return;
+  const r=new FileReader();
+  r.onload=()=>{try{const x=JSON.parse(r.result);if(!Array.isArray(x.classes)||!Array.isArray(x.work))throw Error();
+    state.classes=x.classes;state.work=x.work;state.sound=x.sound!==false;state.theme=x.theme||"light";state.fired=x.fired||[];saveState();renderAll();alert("Backup restored.");}
+    catch{alert("Invalid backup file.");}};
+  r.readAsText(file);e.target.value="";
+}
+function clearAllData(){
+  if(confirm("Delete ALL classes, assignments and settings from this device?")){
+    state.classes=[];state.work=[];state.fired=[];saveState();resetClassForm();resetWorkForm();renderAll();
+  }
+}
+
+window.addEventListener("beforeinstallprompt",(e)=>{
+  e.preventDefault(); deferredPrompt=e; document.getElementById("installBtn").classList.remove("hidden");
+});
+document.getElementById("installBtn").onclick=async()=>{
+  if(!deferredPrompt)return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice; deferredPrompt=null;
+  document.getElementById("installBtn").classList.add("hidden");
+};
+
+if("serviceWorker" in navigator){ window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(console.error)); }
+renderAll();
+setInterval(updateClock,1000);
+document.addEventListener("click",()=>{ if(audioCtx?.state==="suspended") audioCtx.resume(); },{once:true});
+</script>
+</body>
+</html>
+
+
+
+  
+ 
